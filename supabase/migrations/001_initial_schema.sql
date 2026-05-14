@@ -194,3 +194,8 @@ create trigger set_updated_at_student_profiles
 create trigger set_updated_at_scenarios
   before update on public.scenarios
   for each row execute procedure public.set_updated_at();
+
+-- FK adicional para permitir join via PostgREST entre roleplay_sessions e user_profiles
+alter table public.roleplay_sessions
+  add constraint roleplay_sessions_user_profiles_fk
+  foreign key (user_id) references public.user_profiles(id) on delete cascade;
