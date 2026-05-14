@@ -20,12 +20,10 @@ import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
-  DropdownMenuLabel,
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
-import { Badge } from '@/components/ui/badge';
 import { buttonVariants } from '@/components/ui/button';
 
 interface NavItem {
@@ -119,17 +117,17 @@ export default function AppShell({ children, userProfile }: AppShellProps) {
                 <ChevronDown className="w-3.5 h-3.5 text-muted-foreground" />
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end" className="w-56">
-              <DropdownMenuLabel className="flex flex-col gap-0.5">
-                <span className="font-semibold">{userProfile.full_name ?? 'Usuário'}</span>
-                <Badge
-                  variant={isMaster ? 'default' : 'secondary'}
-                  className={cn('w-fit text-xs', isMaster && 'bg-west-purple')}
-                >
+              <div className="px-2 py-1.5 flex flex-col gap-1">
+                <span className="font-semibold text-sm">{userProfile.full_name ?? 'Usuário'}</span>
+                <span className={cn(
+                  'w-fit text-xs px-2 py-0.5 rounded-full font-medium',
+                  isMaster ? 'bg-west-purple text-white' : 'bg-muted text-muted-foreground'
+                )}>
                   {isMaster ? 'Master' : 'Consultor'}
-                </Badge>
-              </DropdownMenuLabel>
+                </span>
+              </div>
               <DropdownMenuSeparator />
-              <DropdownMenuItem onClick={handleLogout} className="text-destructive">
+              <DropdownMenuItem onClick={handleLogout} className="text-destructive cursor-pointer">
                 <LogOut className="w-4 h-4 mr-2" />
                 Sair
               </DropdownMenuItem>
