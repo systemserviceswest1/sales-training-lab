@@ -12,67 +12,60 @@ function buildSystemInstruction(profile: StudentProfile, scenario: Scenario): st
 - Profissão: ${profile.profession ?? 'não informada'}
 - Destino de interesse: ${profile.destination}
 - Estado civil: ${profile.marital_status}
-- Personalidade: Você está se sentindo ${profile.personality}. Incorpore essa personalidade no tom e nas respostas.
-${profile.ai_voice_tone ? `- Tom de voz: Fale em um tom ${profile.ai_voice_tone}.` : ''}
+- Personalidade: ${profile.personality}. Incorpore essa personalidade no tom e nas respostas.
+${profile.ai_voice_tone ? `- Tom de voz: ${profile.ai_voice_tone}.` : ''}
 
-**Cenário atual:**
-- Sua principal preocupação ou dúvida é: "${scenario.description}".
-- Este é o tópico principal que você quer discutir. Traga-o cedo na conversa.
-
-**Seu objetivo:**
-- Participar de uma conversa realista com o consultor de vendas da WEST 1.
-- Desafie o consultor com base no seu cenário e personalidade.
-- Responda naturalmente às perguntas e argumentos do consultor.
+**Cenário atual:** "${scenario.description}"
+${scenario.west1_expectation ? `**Expectativa WEST 1:** ${scenario.west1_expectation}` : ''}
 
 **Regras:**
 - Fale sempre em Português do Brasil.
 - NÃO quebre o personagem. NÃO revele que é uma IA.
-- Mantenha as respostas conversacionais e não muito longas.`;
+- Respostas conversacionais, não muito longas.
+- Desafie o consultor com base na sua personalidade e cenário.`;
 }
 
-function getVoiceForProfile(profile: StudentProfile): string {
-  const toneMap: Record<string, string> = {
-    male: 'onyx',
-    female: 'shimmer',
-    other: 'alloy',
-  };
-  return toneMap[profile.gender.toLowerCase()] ?? 'alloy';
+function getVoice(profile: StudentProfile): string {
+  const map: Record<string, string> = { male: 'onyx', female: 'shimmer', other: 'alloy' };
+  return map[profile.gender.toLowerCase()] ?? 'alloy';
 }
 
 export async function POST(request: NextRequest) {
-  const supabase = await createClient();
-  const { data: { user } } = await supabase.auth.getUser();
+  try {
+    const supabase = await createClient();
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) return NextResponse.json({ error: 'Não autorizado' }, { status: 401 });
 
-  if (!user) {
-    return NextResponse.json({ error: 'Não autorizado' }, { status: 401 });
+    const { profile, scenario } = await request.json() as {
+      profile: StudentProfile;
+      scenario: Scenario;
+    };
+
+    const response = await fetch('https://api.openai.com/v1/realtime/sessions', {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${process.env.OPENAI_API_KEY}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        model: 'gpt-4o-realtime-preview-2024-12-17',
+        voice: getVoice(profile),
+        instructions: buildSystemInstruction(profile, scenario),
+        input_audio_transcription: { model: 'whisper-1' },
+        turn_detection: { type: 'server_vad' },
+      }),
+    });
+
+    if (!response.ok) {
+      const error = await response.text();
+      console.error('OpenAI Realtime session error:', error);
+      return NextResponse.json({ error: 'Falha ao criar sessão de voz' }, { status: 500 });
+    }
+
+    const session = await response.json();
+    return NextResponse.json({ clientSecret: session.client_secret.value });
+  } catch (err) {
+    console.error('realtime-token error:', err);
+    return NextResponse.json({ error: 'Erro interno ao iniciar sessão' }, { status: 500 });
   }
-
-  const { profile, scenario } = await request.json() as {
-    profile: StudentProfile;
-    scenario: Scenario;
-  };
-
-  const response = await fetch('https://api.openai.com/v1/realtime/sessions', {
-    method: 'POST',
-    headers: {
-      'Authorization': `Bearer ${process.env.OPENAI_API_KEY}`,
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify({
-      model: 'gpt-4o-realtime-preview-2024-12-17',
-      voice: getVoiceForProfile(profile),
-      instructions: buildSystemInstruction(profile, scenario),
-      input_audio_transcription: { model: 'whisper-1' },
-      turn_detection: { type: 'server_vad' },
-    }),
-  });
-
-  if (!response.ok) {
-    const error = await response.text();
-    console.error('OpenAI Realtime session error:', error);
-    return NextResponse.json({ error: 'Falha ao criar sessão de voz' }, { status: 500 });
-  }
-
-  const session = await response.json();
-  return NextResponse.json({ clientSecret: session.client_secret.value });
 }

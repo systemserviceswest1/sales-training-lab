@@ -47,8 +47,8 @@ export default function RolePlaySetup({ profiles, scenarios }: Props) {
     setActiveSession({ profile, scenario });
   };
 
-  const handleSessionEnd = (sessionId: string) => {
-    router.push(`/history`);
+  const handleSessionEnd = () => {
+    router.push('/history');
   };
 
   if (activeSession) {

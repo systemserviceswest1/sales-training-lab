@@ -19,7 +19,7 @@ interface Utterance {
 interface Props {
   profile: StudentProfile;
   scenario: Scenario;
-  onEnd: (sessionId: string) => void;
+  onEnd: () => void;
 }
 
 type State = 'idle' | 'connecting' | 'active' | 'evaluating' | 'done';
@@ -30,7 +30,6 @@ export default function RolePlaySession({ profile, scenario, onEnd }: Props) {
   const [isStudentSpeaking, setIsStudentSpeaking] = useState(false);
   const [elapsed, setElapsed] = useState(0);
   const [evaluation, setEvaluation] = useState<EvaluationResult | null>(null);
-  const [savedSessionId, setSavedSessionId] = useState<string | null>(null);
 
   const pcRef = useRef<RTCPeerConnection | null>(null);
   const dcRef = useRef<RTCDataChannel | null>(null);
@@ -167,31 +166,49 @@ export default function RolePlaySession({ profile, scenario, onEnd }: Props) {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ transcript: fullTranscript, profile, scenario }),
       });
+
+      if (!evalRes.ok) {
+        const err = await evalRes.json().catch(() => ({}));
+        throw new Error(err.error ?? `Avaliação retornou status ${evalRes.status}`);
+      }
+
       const result: EvaluationResult = await evalRes.json();
       setEvaluation(result);
 
       const supabase = createClient();
       const { data: { user } } = await supabase.auth.getUser();
-      if (user) {
-        const { data: session } = await supabase.from('roleplay_sessions').insert({
-          user_id: user.id,
-          student_profile_snapshot: profile,
-          scenario_snapshot: scenario,
-          transcript: fullTranscript,
-          score: result.score,
-          feedback_positive: result.feedback.positive_points,
-          feedback_improvements: result.feedback.improvement_points,
-          duration_seconds: duration,
-          completed_at: new Date().toISOString(),
-        }).select().single();
-        if (session) setSavedSessionId(session.id);
-      }
-    } catch (err) {
-      console.error(err);
-      toast.error('Erro ao gerar avaliação. Tente novamente.');
-    }
 
-    setState('done');
+      if (user) {
+        const { data: session, error: insertError } = await supabase
+          .from('roleplay_sessions')
+          .insert({
+            user_id: user.id,
+            student_profile_snapshot: profile,
+            scenario_snapshot: scenario,
+            transcript: fullTranscript,
+            score: result.score,
+            feedback_positive: result.feedback.positive_points,
+            feedback_improvements: result.feedback.improvement_points,
+            duration_seconds: duration,
+            completed_at: new Date().toISOString(),
+          })
+          .select()
+          .single();
+
+        if (insertError) {
+          console.error('Erro ao salvar sessão:', insertError.message);
+          toast.error('Avaliação gerada, mas erro ao salvar no histórico.');
+        } else {
+          console.log('Sessão salva:', session?.id);
+        }
+      }
+
+      setState('done');
+    } catch (err) {
+      console.error('stopSession error:', err);
+      toast.error('Erro ao gerar avaliação. Tente novamente.');
+      setState('idle');
+    }
   }, [state, transcript, profile, scenario]);
 
   if (state === 'done' && evaluation) {
@@ -201,7 +218,7 @@ export default function RolePlaySession({ profile, scenario, onEnd }: Props) {
         transcript={transcript}
         profile={profile}
         scenario={scenario}
-        onFinish={() => onEnd(savedSessionId ?? '')}
+        onFinish={onEnd}
       />
     );
   }

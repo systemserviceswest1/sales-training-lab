@@ -5,7 +5,7 @@ import type { RoleplaySession } from '@/types';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import StarRating from '@/components/features/roleplay/StarRating';
-import { ChevronDown, ChevronUp, Clock, User } from 'lucide-react';
+import { ChevronDown, ChevronUp, Clock, User, Timer } from 'lucide-react';
 
 interface Props {
   sessions: RoleplaySession[];
@@ -36,7 +36,7 @@ export default function HistoryView({ sessions, isMaster }: Props) {
             const isExpanded = expandedId === session.id;
             const profile = session.student_profile_snapshot;
             const scenario = session.scenario_snapshot;
-            const consultant = (session.user_profile as any);
+            const consultant = session.user_profile as { full_name: string | null; email: string | null } | null;
 
             return (
               <Card key={session.id} className="overflow-hidden">
@@ -59,6 +59,12 @@ export default function HistoryView({ sessions, isMaster }: Props) {
                         <span className="flex items-center gap-1">
                           <User className="w-3.5 h-3.5" />
                           {consultant.full_name ?? consultant.email ?? 'Consultor'}
+                        </span>
+                      )}
+                      {session.duration_seconds != null && (
+                        <span className="flex items-center gap-1">
+                          <Timer className="w-3.5 h-3.5" />
+                          {Math.floor(session.duration_seconds / 60)}:{String(session.duration_seconds % 60).padStart(2, '0')}
                         </span>
                       )}
                       {profile && (
