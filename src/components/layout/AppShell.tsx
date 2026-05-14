@@ -11,6 +11,7 @@ import {
   History,
   Users,
   BookOpen,
+  ShieldCheck,
   LogOut,
   ChevronDown,
   FlaskConical,
@@ -39,6 +40,7 @@ const navItems: NavItem[] = [
   { href: '/history', label: 'Histórico', icon: History },
   { href: '/profiles', label: 'Personas', icon: Users, masterOnly: true },
   { href: '/scenarios', label: 'Cenários', icon: BookOpen, masterOnly: true },
+  { href: '/users', label: 'Usuários', icon: ShieldCheck, masterOnly: true },
 ];
 
 interface AppShellProps {
