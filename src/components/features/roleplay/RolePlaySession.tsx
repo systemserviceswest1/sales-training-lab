@@ -90,15 +90,52 @@ export default function RolePlaySession({ profile, scenario, onEnd }: Props) {
     if (state !== 'idle') return;
     setState('connecting');
 
+    // Step 1: check browser support
+    if (!navigator.mediaDevices?.getUserMedia) {
+      toast.error('Seu navegador não suporta acesso ao microfone. Use Chrome ou Edge.');
+      setState('idle');
+      return;
+    }
+
+    // Step 2: get ephemeral token from server
+    let clientSecret: string;
     try {
       const tokenRes = await fetch('/api/ai/realtime-token', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ profile, scenario }),
       });
-      if (!tokenRes.ok) throw new Error('Falha ao obter token de sessão');
-      const { clientSecret } = await tokenRes.json();
+      const tokenData = await tokenRes.json();
+      if (!tokenRes.ok) {
+        throw new Error(tokenData.error ?? 'Falha ao obter token de sessão');
+      }
+      clientSecret = tokenData.clientSecret;
+    } catch (err) {
+      console.error('Token error:', err);
+      toast.error(`Erro ao conectar ao servidor: ${err instanceof Error ? err.message : 'Tente novamente.'}`);
+      setState('idle');
+      return;
+    }
 
+    // Step 3: request microphone
+    let stream: MediaStream;
+    try {
+      stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+    } catch (err) {
+      console.error('Mic error:', err);
+      const isPermission = err instanceof DOMException &&
+        (err.name === 'NotAllowedError' || err.name === 'PermissionDeniedError');
+      toast.error(
+        isPermission
+          ? 'Permissão de microfone negada. Clique no ícone 🔒 na barra de endereço e permita o microfone.'
+          : `Microfone não disponível: ${err instanceof Error ? err.message : 'verifique o dispositivo.'}`
+      );
+      setState('idle');
+      return;
+    }
+
+    // Step 4: establish WebRTC connection
+    try {
       const pc = new RTCPeerConnection();
       pcRef.current = pc;
 
@@ -107,7 +144,6 @@ export default function RolePlaySession({ profile, scenario, onEnd }: Props) {
       audioRef.current = audio;
       pc.ontrack = (e) => { audio.srcObject = e.streams[0]; };
 
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
       stream.getTracks().forEach((t) => pc.addTrack(t, stream));
 
       const dc = pc.createDataChannel('oai-events');
@@ -118,7 +154,7 @@ export default function RolePlaySession({ profile, scenario, onEnd }: Props) {
       await pc.setLocalDescription(offer);
 
       const sdpRes = await fetch(
-        'https://api.openai.com/v1/realtime?model=gpt-4o-realtime-preview-2024-12-17',
+        'https://api.openai.com/v1/realtime?model=gpt-4o-realtime-preview',
         {
           method: 'POST',
           headers: {
@@ -128,15 +164,22 @@ export default function RolePlaySession({ profile, scenario, onEnd }: Props) {
           body: offer.sdp,
         }
       );
-      if (!sdpRes.ok) throw new Error('Falha ao conectar com OpenAI Realtime');
+
+      if (!sdpRes.ok) {
+        const errText = await sdpRes.text();
+        throw new Error(`OpenAI Realtime: ${sdpRes.status} — ${errText.slice(0, 100)}`);
+      }
 
       const answerSdp = await sdpRes.text();
       await pc.setRemoteDescription({ type: 'answer', sdp: answerSdp });
 
       setState('active');
     } catch (err) {
-      console.error(err);
-      toast.error('Não foi possível iniciar a sessão. Verifique as permissões de microfone.');
+      console.error('WebRTC error:', err);
+      pcRef.current?.close();
+      pcRef.current = null;
+      stream.getTracks().forEach((t) => t.stop());
+      toast.error(`Erro ao conectar com a IA: ${err instanceof Error ? err.message : 'Tente novamente.'}`);
       setState('idle');
     }
   }, [state, profile, scenario, handleDataChannelMessage]);
