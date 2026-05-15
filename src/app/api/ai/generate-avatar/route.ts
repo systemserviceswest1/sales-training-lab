@@ -17,18 +17,27 @@ export async function POST(request: NextRequest) {
     const prompt = `Pixar-style friendly portrait avatar, forward-facing, soft neutral background, no text or logos. Character: ${profile.age ?? 25} years old, ${profile.gender ?? 'person'}, works as ${profile.profession ?? 'professional'}, personality: ${profile.personality ?? 'friendly'}.`;
 
     const response = await openai.images.generate({
-      model: 'dall-e-3',
+      model: 'gpt-image-1',
       prompt,
       n: 1,
       size: '1024x1024',
-      response_format: 'b64_json',
+      quality: 'medium',
     });
 
-    const b64 = response.data?.[0]?.b64_json;
-    if (!b64) return NextResponse.json({ error: 'Falha ao gerar imagem' }, { status: 500 });
+    const item = response.data?.[0];
+    if (!item) return NextResponse.json({ error: 'Falha ao gerar imagem' }, { status: 500 });
 
-    // Upload to Supabase Storage instead of returning base64
-    const imageBuffer = Buffer.from(b64, 'base64');
+    let imageBuffer: Buffer;
+
+    if (item.b64_json) {
+      imageBuffer = Buffer.from(item.b64_json, 'base64');
+    } else if (item.url) {
+      const imgRes = await fetch(item.url);
+      imageBuffer = Buffer.from(await imgRes.arrayBuffer());
+    } else {
+      return NextResponse.json({ error: 'Formato de imagem não suportado' }, { status: 500 });
+    }
+
     const fileName = `${user.id}-${Date.now()}.png`;
 
     const service = createServiceClient(
