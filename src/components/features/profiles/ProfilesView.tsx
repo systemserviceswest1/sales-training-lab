@@ -56,13 +56,18 @@ export default function ProfilesView({ initialProfiles }: Props) {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ profile: form }),
       });
-      const { imageUrl } = await res.json();
-      updateForm('avatar_url', imageUrl);
-      toast.success('Avatar gerado!');
-    } catch {
+      const data = await res.json();
+      if (!res.ok || !data.imageUrl) {
+        throw new Error(data.error ?? 'Resposta inválida');
+      }
+      updateForm('avatar_url', data.imageUrl);
+      toast.success('Avatar gerado! Clique em Salvar para confirmar.');
+    } catch (err) {
+      console.error('Avatar error:', err);
       toast.error('Falha ao gerar avatar. Tente novamente.');
+    } finally {
+      setIsGeneratingAvatar(false);
     }
-    setIsGeneratingAvatar(false);
   };
 
   const handleSave = async () => {
